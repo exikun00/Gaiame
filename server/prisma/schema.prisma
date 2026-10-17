@@ -1,0 +1,93 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum DownloadStatus {
+  PENDING
+  DOWNLOADING
+  COMPLETED
+  FAILED
+}
+
+model Anime {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  title       String
+  posterUrl   String
+  synopsis    String   @db.Text
+  genres      String[]
+  status        String   @default("En emisión")
+  type          String?  @default("Serie")
+  studios       String?
+  seasonName    String?
+  languages     String?
+  episodesCount Int?
+  duration      String?
+  aired         String?
+  inWatchlist   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  seasons       Season[]
+
+  @@map("animes")
+}
+
+model Season {
+  id        String   @id @default(uuid())
+  animeId   String
+  number    Int
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  anime     Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  episodes  Episode[]
+
+  @@unique([animeId, number])
+  @@map("seasons")
+}
+
+model Episode {
+  id               String         @id @default(uuid())
+  seasonId         String
+  number           Int
+  title            String
+  image            String?
+  downloadStatus   DownloadStatus @default(PENDING)
+  filePath         String?
+  fileSizeBytes    BigInt?
+  downloadProgress Int            @default(0)
+  usedServer       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  season           Season         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  downloadTasks    DownloadTask[]
+
+  @@unique([seasonId, number])
+  @@map("episodes")
+}
+
+model DownloadTask {
+  id               String         @id @default(uuid())
+  episodeId        String
+  status           DownloadStatus @default(PENDING)
+  progress         Int            @default(0)
+  speedBytesPerSec Float          @default(0)
+  currentServer    String?
+  errorMessage     String?        @db.Text
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  episode          Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@map("download_tasks")
+}
