@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { ScrapedServer } from './scraper.js';
 import logger from '../utils/logger.js';
+import { ANIME_BASE_URL } from '../config/constants.js';
 
 export interface ResolvedStream {
   server_name: string;
@@ -174,7 +175,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
       });
 
@@ -199,7 +200,7 @@ export class StreamExtractor {
         server_name,
         stream_url: url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: url,
       };
     } catch {
@@ -213,7 +214,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
       });
 
@@ -238,7 +239,7 @@ export class StreamExtractor {
         server_name,
         stream_url: url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: url,
       };
     } catch {
@@ -252,7 +253,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
       });
 
@@ -280,7 +281,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
       });
 
@@ -315,7 +316,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
         validateStatus: () => true,
       });
@@ -329,7 +330,7 @@ export class StreamExtractor {
         server_name,
         stream_url: embed_url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: embed_url,
       };
     } catch {
@@ -343,7 +344,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
         validateStatus: () => true,
       });
@@ -357,7 +358,7 @@ export class StreamExtractor {
         server_name,
         stream_url: url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: url,
       };
     } catch {
@@ -371,7 +372,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
         validateStatus: () => true,
       });
@@ -385,7 +386,7 @@ export class StreamExtractor {
         server_name,
         stream_url: url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: url,
       };
     } catch {
@@ -399,7 +400,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
         validateStatus: () => true,
       });
@@ -413,7 +414,7 @@ export class StreamExtractor {
         server_name,
         stream_url: url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: url,
       };
     } catch {
@@ -427,7 +428,7 @@ export class StreamExtractor {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
         validateStatus: () => true,
       });
@@ -441,7 +442,7 @@ export class StreamExtractor {
         server_name,
         stream_url: url,
         is_hls: false,
-        headers: { Referer: 'https://jkanime.net/' },
+        headers: { Referer:  ANIME_BASE_URL },
         original_embed_url: url,
       };
     } catch {
@@ -491,7 +492,7 @@ export class StreamExtractor {
         timeout: 7000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
         maxRedirects: 5,
         validateStatus: () => true,

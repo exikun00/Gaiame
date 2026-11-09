@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { existsSync, createReadStream, createWriteStream, statSync } from 'fs';
 import axios from 'axios';
 import prisma from './prisma.js';
+import { ANIME_BASE_URL } from '../config/constants.js';
 
 export class StorageService {
   private base_data_dir: string;
@@ -186,7 +187,7 @@ export class StorageService {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
       });
 
@@ -226,7 +227,7 @@ export class StorageService {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Referer: 'https://jkanime.net/',
+          Referer:  ANIME_BASE_URL,
         },
       });
 

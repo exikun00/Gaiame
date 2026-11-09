@@ -3,11 +3,13 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 interface CurlyEyebrowProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  text?: string;
   className?: string;
 }
 
-export const CurlyEyebrow: React.FC<CurlyEyebrowProps> = ({ children, className }) => {
+export const CurlyEyebrow: React.FC<CurlyEyebrowProps> = ({ children, text, className }) => {
+  const content = children ?? text;
   return (
     <div
       className={twMerge(
@@ -18,7 +20,7 @@ export const CurlyEyebrow: React.FC<CurlyEyebrowProps> = ({ children, className 
       )}
     >
       <span className="text-surface-50 font-mono">&#123;</span>{' '}
-      <span>{children}</span>{' '}
+      <span>{content}</span>{' '}
       <span className="text-surface-50 font-mono">&#125;</span>
     </div>
   );

@@ -12,7 +12,13 @@ interface DownloadsPageProps {
   storage_usage: { used_bytes: number; episode_count: number };
   onCancelTask: (task_id: string) => Promise<boolean>;
   onDeleteFile: (episode_id: string) => Promise<boolean>;
-  onPlayEpisode: (episode: { id: string; title: string; is_downloaded: boolean }) => void;
+  onPlayEpisode: (episode: {
+    id: string;
+    title: string;
+    is_downloaded: boolean;
+    slug?: string;
+    number?: number;
+  }) => void;
   onGoToCatalog: () => void;
 }
 
@@ -182,10 +188,12 @@ export const DownloadsPage: React.FC<DownloadsPageProps> = ({
                         id: ep.id,
                         title: `${ep.season.anime.title} — Ep. ${ep.number}`,
                         is_downloaded: true,
+                        slug: ep.season.anime.slug,
+                        number: ep.number,
                       })
                     }
                     className="w-10 h-10 rounded-full border border-surface-cream flex items-center justify-center flex-shrink-0 text-surface-cream hover:text-shockingly-green hover:border-shockingly-green transition-colors cursor-pointer"
-                    title="Reproducir desde servidor (HTTP 206)"
+                    title="Reproducir desde servidor"
                   >
                     <Play className="w-4 h-4 fill-current ml-0.5" />
                   </button>

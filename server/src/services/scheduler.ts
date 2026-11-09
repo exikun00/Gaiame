@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import prisma from './prisma.js';
 import storageService from './storage.js';
 import jkanimeScraper from './scraper.js';
+import franchiseService from './franchiseService.js';
 import logger, { userLogger, syncLogSymlinks } from '../utils/logger.js';
 
 export class SchedulerService {
@@ -45,8 +46,30 @@ export class SchedulerService {
     let purged_count = 0;
 
     try {
+      // Purgar únicamente animes fuera de la watchlist que NO tengan episodios descargados ni descargas activas
       const unlisted_animes = await prisma.anime.findMany({
-        where: { inWatchlist: false },
+        where: {
+          inWatchlist: false,
+          seasons: {
+            none: {
+              episodes: {
+                some: {
+                  OR: [
+                    { downloadStatus: 'COMPLETED' },
+                    { filePath: { not: null } },
+                    {
+                      downloadTasks: {
+                        some: {
+                          status: { in: ['PENDING', 'DOWNLOADING'] },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
       });
 
       if (unlisted_animes.length === 0) {
@@ -77,6 +100,16 @@ export class SchedulerService {
       }
 
       logger.info({ purged_count }, '[Scheduler] Purga diferida completada con éxito');
+
+      // Purga de franquicias huérfanas
+      try {
+        const purged_franchises = await franchiseService.purgeOrphanFranchises();
+        if (purged_franchises > 0) {
+          logger.info({ purged_franchises }, '[Scheduler] Franquicias huérfanas purgadas');
+        }
+      } catch (f_err) {
+        logger.error({ error: f_err }, '[Scheduler] Error purgando franquicias huérfanas');
+      }
     } catch (error) {
       logger.error({ error }, '[Scheduler] Error en la ejecución de la purga diferida');
     } finally {
@@ -132,24 +165,35 @@ export class SchedulerService {
             },
           });
 
-          // Si hay episodios nuevos, registrarlos y descargar miniaturas
+          // Si hay episodios nuevos, registrarlos
           if (scraped.anime_id && scraped.csrf_token) {
             const season = anime.seasons[0];
             if (season) {
-              const scraped_episodes = await jkanimeScraper.getAllAnimeEpisodes(
+              // Consultar la última página de episodios para detectar nuevos lanzamientos sin saturar JKAnime
+              const first_batch = await jkanimeScraper.getAnimeEpisodes(
                 scraped.anime_id,
+                1,
                 scraped.csrf_token
               );
+              let latest_episodes = first_batch.episodes;
+              if (first_batch.last_page > 1) {
+                const last_batch = await jkanimeScraper.getAnimeEpisodes(
+                  scraped.anime_id,
+                  first_batch.last_page,
+                  scraped.csrf_token
+                );
+                latest_episodes = [...latest_episodes, ...last_batch.episodes];
+              }
 
               const existing_ep_numbers = new Set(season.episodes.map((e) => e.number));
 
-              for (const ep of scraped_episodes) {
-                // Descargar miniatura local
-                const local_thumb = ep.image
-                  ? await storageService.saveEpisodeThumbnail(anime.slug, ep.number, ep.image)
-                  : null;
-
+              for (const ep of latest_episodes) {
                 if (!existing_ep_numbers.has(ep.number)) {
+                  // Descargar miniatura únicamente para episodios nuevos
+                  const local_thumb = ep.image
+                    ? await storageService.saveEpisodeThumbnail(anime.slug, ep.number, ep.image)
+                    : null;
+
                   await prisma.episode.create({
                     data: {
                       seasonId: season.id,
@@ -160,15 +204,6 @@ export class SchedulerService {
                     },
                   });
                   logger.info({ slug: anime.slug, episode: ep.number }, '[Scheduler] Nuevo episodio detectado y registrado');
-                } else if (local_thumb) {
-                  // Si ya existía pero no tenía miniatura local, actualizarla
-                  const existing_ep = season.episodes.find((e) => e.number === ep.number);
-                  if (existing_ep && existing_ep.image !== local_thumb) {
-                    await prisma.episode.update({
-                      where: { id: existing_ep.id },
-                      data: { image: local_thumb },
-                    });
-                  }
                 }
               }
             }
@@ -176,6 +211,13 @@ export class SchedulerService {
         } catch (anime_err) {
           logger.warn({ slug: anime.slug, error: anime_err }, '[Scheduler] Error sincronizando anime');
         }
+      }
+
+      // Sincronizar franquicias de la watchlist con AniList para detectar nuevas temporadas
+      try {
+        await franchiseService.syncWatchlistFranchises();
+      } catch (f_sync_err) {
+        logger.error({ error: f_sync_err }, '[Scheduler] Error sincronizando franquicias de watchlist');
       }
 
       logger.info('[Scheduler] Sincronización diaria de metadatos finalizada');

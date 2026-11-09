@@ -10,6 +10,10 @@ interface VideoPlayerProps {
   onClose: () => void;
   onNextEpisode?: () => void;
   onPrevEpisode?: () => void;
+  anime_slug?: string;
+  anime_title?: string;
+  episode_number?: number;
+  poster_url?: string;
 }
 
 interface ServerOption {
@@ -31,9 +35,57 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onClose,
   onNextEpisode,
   onPrevEpisode,
+  anime_slug,
+  anime_title,
+  episode_number,
+  poster_url,
 }) => {
   const video_ref = useRef<HTMLVideoElement | null>(null);
   const hls_ref = useRef<Hls | null>(null);
+  const lastReportedTime = useRef<number>(0);
+
+  const reportProgress = (currentTime: number, duration: number, isEnding: boolean = false) => {
+    if (!duration || duration <= 0) return;
+    const resolved_slug = anime_slug || episode_id.replace(/-\d+$/, '');
+    const resolved_ep = episode_number || parseInt(episode_id.match(/-(\d+)$/)?.[1] || '1', 10);
+
+    fetch('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        animeSlug: resolved_slug,
+        animeTitle: anime_title || episode_title.split('-')[0]?.trim() || resolved_slug,
+        posterUrl: poster_url || '',
+        episodeNum: resolved_ep,
+        episodeId: episode_id,
+        progressSec: currentTime,
+        durationSec: duration,
+        completed: isEnding || currentTime / duration >= 0.88,
+      }),
+    }).catch(() => {});
+  };
+
+  const handleTimeUpdate = () => {
+    if (!video_ref.current) return;
+    const ct = video_ref.current.currentTime;
+    const dur = video_ref.current.duration;
+    if (Math.abs(ct - lastReportedTime.current) >= 6) {
+      lastReportedTime.current = ct;
+      reportProgress(ct, dur, false);
+    }
+  };
+
+  const handleEnded = () => {
+    if (!video_ref.current) return;
+    reportProgress(video_ref.current.duration, video_ref.current.duration, true);
+  };
+
+  const handleClose = () => {
+    if (video_ref.current) {
+      reportProgress(video_ref.current.currentTime, video_ref.current.duration, false);
+    }
+    onClose();
+  };
 
   const [stream_data, setStreamData] = useState<RemoteStreamData | null>(null);
   const [servers, setServers] = useState<ServerOption[]>([]);
@@ -187,11 +239,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               {is_downloaded ? (
                 <span className="flex items-center gap-1 text-shockingly-green font-medium">
                   <HardDrive className="w-3.5 h-3.5" />
-                  Streaming local en servidor (HTTP 206)
+                  Streaming local en servidor
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-blue">
-                  <Globe className="w-3.5 h-3.5" />
+                <span className="flex items-center gap-1 text-surface-cream/80 font-medium">
+                  <Globe className="w-3.5 h-3.5 text-shockingly-green" />
                   Streaming remoto: {selected_server || stream_data?.server_name || 'Detectando servidor'}
                 </span>
               )}
@@ -200,7 +252,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
 
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="p-2 rounded-full border border-surface-25 hover:border-surface-cream text-surface-cream transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
@@ -239,7 +291,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <h4 className="text-lg font-semibold text-surface-cream mb-1">Error de reproducción</h4>
             <p className="text-sm text-surface-50 mb-4">{error_msg}</p>
             {servers.length > 1 && (
-              <p className="text-xs text-blue">
+              <p className="text-xs text-surface-cream/70">
                 Prueba a seleccionar otro servidor en la barra superior.
               </p>
             )}
@@ -258,6 +310,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             ref={video_ref}
             controls
             playsInline
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={handleEnded}
             className={`w-full h-full ${error_msg ? 'hidden' : 'block'}`}
           />
         )}

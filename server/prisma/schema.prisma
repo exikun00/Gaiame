@@ -30,10 +30,12 @@ model Anime {
   duration      String?
   aired         String?
   inWatchlist   Boolean  @default(false)
+  franchiseId   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   seasons       Season[]
+  franchise     Franchise? @relation(fields: [franchiseId], references: [id], onDelete: SetNull)
 
   @@map("animes")
 }
@@ -90,4 +92,59 @@ model DownloadTask {
   episode          Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
   @@map("download_tasks")
+}
+
+model WatchHistory {
+  id          String   @id @default(uuid())
+  animeSlug   String
+  animeTitle  String
+  posterUrl   String
+  episodeNum  Int
+  episodeId   String?
+  progressSec Float    @default(0)
+  durationSec Float    @default(0)
+  completed   Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([animeSlug, episodeNum])
+  @@index([updatedAt])
+  @@map("watch_history")
+}
+
+model Franchise {
+  id           String          @id @default(uuid())
+  name         String          @unique
+  rootSlug     String?
+  lastSyncedAt DateTime        @default(now())
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  animes       Anime[]
+  items        FranchiseItem[]
+
+  @@map("franchises")
+}
+
+model FranchiseItem {
+  id            String    @id @default(uuid())
+  franchiseId   String
+  anilistId     Int?
+  jkanimeSlug   String
+  title         String
+  format        String    // "TV" | "OVA" | "ONA" | "SPECIAL" | "MOVIE"
+  category      String    // "season" | "movie" | "ova" | "special"
+  seasonNumber  Int?
+  year          Int?
+  episodes      Int?
+  status        String?
+  coverUrl      String
+  localCoverUrl String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  franchise     Franchise @relation(fields: [franchiseId], references: [id], onDelete: Cascade)
+
+  @@unique([franchiseId, jkanimeSlug])
+  @@map("franchise_items")
 }

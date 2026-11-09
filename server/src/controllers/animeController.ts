@@ -2,7 +2,123 @@ import { Request, Response } from 'express';
 import prisma from '../services/prisma.js';
 import jkanimeScraper from '../services/scraper.js';
 import storageService from '../services/storage.js';
+import franchiseService from '../services/franchiseService.js';
 import logger, { userLogger } from '../utils/logger.js';
+
+/**
+ * Asegura que un anime y su primera temporada con episodios estén persistidos en la base de datos PostgreSQL.
+ * Puede guardarse con inWatchlist = true o false (por ejemplo para descargas puntuales sin agregar a watchlist).
+ */
+export async function ensureAnimePersisted(slug: string, inWatchlist: boolean = false) {
+  let anime = await prisma.anime.findUnique({
+    where: { slug },
+    include: {
+      seasons: {
+        orderBy: { number: 'asc' },
+        include: {
+          episodes: {
+            orderBy: { number: 'asc' },
+          },
+        },
+      },
+    },
+  });
+
+  if (anime && anime.seasons.length > 0) {
+    if (inWatchlist && !anime.inWatchlist) {
+      anime = await prisma.anime.update({
+        where: { id: anime.id },
+        data: { inWatchlist: true },
+        include: {
+          seasons: {
+            orderBy: { number: 'asc' },
+            include: {
+              episodes: {
+                orderBy: { number: 'asc' },
+              },
+            },
+          },
+        },
+      });
+    }
+    return anime;
+  }
+
+  logger.info({ slug, inWatchlist }, 'Persistiendo anime en base de datos local');
+  const scraped = await jkanimeScraper.getAnimeDetails(slug);
+  if (!scraped) {
+    throw new Error(`Anime no encontrado en el proveedor: ${slug}`);
+  }
+
+  // Descarga de carátula local
+  const local_poster = await storageService.saveAnimeCover(slug, scraped.poster_url);
+
+  anime = await prisma.anime.create({
+    data: {
+      slug,
+      title: scraped.title,
+      posterUrl: local_poster || scraped.poster_url,
+      synopsis: scraped.synopsis,
+      genres: scraped.genres,
+      status: scraped.status,
+      type: scraped.type || 'Serie',
+      studios: scraped.studios || null,
+      seasonName: scraped.season_name || null,
+      languages: scraped.languages || null,
+      episodesCount: scraped.episodes_count || null,
+      duration: scraped.duration || null,
+      aired: scraped.aired || null,
+      inWatchlist,
+    },
+    include: {
+      seasons: {
+        include: { episodes: true },
+      },
+    },
+  });
+
+  const season = await prisma.season.create({
+    data: {
+      animeId: anime.id,
+      number: 1,
+      title: 'Temporada 1',
+    },
+  });
+
+  if (scraped.anime_id && scraped.csrf_token) {
+    const page1 = await jkanimeScraper.getAnimeEpisodes(
+      scraped.anime_id,
+      1,
+      scraped.csrf_token
+    );
+
+    for (const ep of page1.episodes) {
+      await prisma.episode.create({
+        data: {
+          seasonId: season.id,
+          number: ep.number,
+          title: ep.title,
+          image: ep.image || null,
+          downloadStatus: 'PENDING',
+        },
+      });
+    }
+  }
+
+  return await prisma.anime.findUniqueOrThrow({
+    where: { id: anime.id },
+    include: {
+      seasons: {
+        orderBy: { number: 'asc' },
+        include: {
+          episodes: {
+            orderBy: { number: 'asc' },
+          },
+        },
+      },
+    },
+  });
+}
 
 export class AnimeController {
   public async search(req: Request, res: Response): Promise<void> {
@@ -53,6 +169,34 @@ export class AnimeController {
     } catch (db_error) {
       console.error(`Error buscando anime en biblioteca local (${query}):`, db_error);
       res.status(500).json({ error: 'Error realizando búsqueda' });
+    }
+  }
+
+  public async getHome(_req: Request, res: Response): Promise<void> {
+    try {
+      const homeData = await jkanimeScraper.getHomePageContent();
+      res.json(homeData);
+    } catch (error) {
+      logger.error({ error }, 'Error obteniendo contenido de Home');
+      res.status(500).json({ error: 'Error obteniendo contenido de Home' });
+    }
+  }
+
+  public async getFranchise(req: Request, res: Response): Promise<void> {
+    const raw_slug = req.params['slug'];
+    const slug = typeof raw_slug === 'string' ? raw_slug : '';
+
+    if (!slug) {
+      res.status(400).json({ error: 'Slug de anime es requerido' });
+      return;
+    }
+
+    try {
+      const franchise = await franchiseService.getFranchise(slug);
+      res.json(franchise);
+    } catch (error) {
+      logger.error({ slug, error }, 'Error obteniendo franquicia');
+      res.status(500).json({ error: 'Error obteniendo franquicia' });
     }
   }
 
@@ -131,11 +275,20 @@ export class AnimeController {
       });
 
       if (existing_anime && existing_anime.seasons.length > 0 && (existing_anime.seasons[0]?.episodes.length ?? 0) > 0) {
+        const total_count = await prisma.episode.count({
+          where: { season: { animeId: existing_anime.id } },
+        });
+        const total_episodes = Math.max(existing_anime.episodesCount || 0, total_count);
+        const total_pages = Math.ceil(total_episodes / 16) || 1;
+
         const serialized = {
           ...existing_anime,
+          episodesCount: total_episodes,
+          totalPages: total_pages,
+          currentPage: 1,
           seasons: existing_anime.seasons.map((s) => ({
             ...s,
-            episodes: s.episodes.map((ep) => ({
+            episodes: s.episodes.slice(0, 16).map((ep) => ({
               ...ep,
               fileSizeBytes: ep.fileSizeBytes ? ep.fileSizeBytes.toString() : null,
             })),
@@ -165,13 +318,20 @@ export class AnimeController {
         downloadProgress: number;
       }> = [];
 
+      let total_pages = 1;
+      let total_episodes = scraped_details.episodes_count || 0;
+
       if (scraped_details.anime_id && scraped_details.csrf_token) {
-        const scraped_eps = await jkanimeScraper.getAllAnimeEpisodes(
+        const page1 = await jkanimeScraper.getAnimeEpisodes(
           scraped_details.anime_id,
+          1,
           scraped_details.csrf_token
         );
 
-        episodes_list = scraped_eps.map((ep) => ({
+        total_episodes = page1.total || total_episodes;
+        total_pages = page1.last_page || Math.ceil(total_episodes / 16) || 1;
+
+        episodes_list = page1.episodes.map((ep) => ({
           id: `${slug}-${ep.number}`,
           number: ep.number,
           title: ep.title,
@@ -196,7 +356,9 @@ export class AnimeController {
         studios: scraped_details.studios || null,
         seasonName: scraped_details.season_name || null,
         languages: scraped_details.languages || null,
-        episodesCount: scraped_details.episodes_count || episodes_list.length,
+        episodesCount: total_episodes || episodes_list.length,
+        totalPages: total_pages,
+        currentPage: 1,
         duration: scraped_details.duration || null,
         aired: scraped_details.aired || null,
         inWatchlist: false,
@@ -234,86 +396,14 @@ export class AnimeController {
     try {
       let anime = await prisma.anime.findUnique({
         where: { slug },
-        include: {
-          seasons: {
-            include: { episodes: true },
-          },
-        },
       });
 
       if (!anime) {
-        // El anime no existía en BD; obtener ficha de JKAnime y persistirlo con inWatchlist = true
-        logger.info({ slug }, 'Guardando nuevo anime en biblioteca con descarga de portadas locales');
-        const scraped = await jkanimeScraper.getAnimeDetails(slug);
-        if (!scraped) {
-          res.status(404).json({ error: 'Anime no encontrado en JKAnime' });
-          return;
-        }
-
-        // Descarga de carátula local
-        const local_poster = await storageService.saveAnimeCover(slug, scraped.poster_url);
-
-        anime = await prisma.anime.create({
-          data: {
-            slug,
-            title: scraped.title,
-            posterUrl: local_poster || scraped.poster_url,
-            synopsis: scraped.synopsis,
-            genres: scraped.genres,
-            status: scraped.status,
-            type: scraped.type || 'Serie',
-            studios: scraped.studios || null,
-            seasonName: scraped.season_name || null,
-            languages: scraped.languages || null,
-            episodesCount: scraped.episodes_count || null,
-            duration: scraped.duration || null,
-            aired: scraped.aired || null,
-            inWatchlist: true,
-          },
-          include: {
-            seasons: {
-              include: { episodes: true },
-            },
-          },
-        });
-
-        const season = await prisma.season.create({
-          data: {
-            animeId: anime.id,
-            number: 1,
-            title: 'Temporada 1',
-          },
-        });
-
-        if (scraped.anime_id && scraped.csrf_token) {
-          const scraped_episodes = await jkanimeScraper.getAllAnimeEpisodes(
-            scraped.anime_id,
-            scraped.csrf_token
-          );
-
-          for (const ep of scraped_episodes) {
-            // Descargar miniatura local
-            const local_thumb = ep.image
-              ? await storageService.saveEpisodeThumbnail(slug, ep.number, ep.image)
-              : null;
-
-            await prisma.episode.create({
-              data: {
-                seasonId: season.id,
-                number: ep.number,
-                title: ep.title,
-                image: local_thumb || ep.image,
-                downloadStatus: 'PENDING',
-              },
-            });
-          }
-        }
-
+        anime = await ensureAnimePersisted(slug, true);
         userLogger.info(
           { action: 'WATCHLIST_ADD', slug, title: anime.title },
           `[Watchlist] Anime ${anime.title} agregado a la biblioteca`
         );
-
         res.json({ inWatchlist: true });
         return;
       }
@@ -374,111 +464,133 @@ export class AnimeController {
     }
   }
 
+  public async getEpisodes(req: Request, res: Response): Promise<void> {
+    const raw_slug = req.params['slug'];
+    const slug = typeof raw_slug === 'string' ? raw_slug : '';
+
+    if (!slug) {
+      res.status(400).json({ error: 'Slug de anime es requerido' });
+      return;
+    }
+
+    try {
+      const page_raw = req.query['page'] as string | undefined;
+      const episode_raw = req.query['episode'] as string | undefined;
+      const start_raw = req.query['start'] as string | undefined;
+      const end_raw = req.query['end'] as string | undefined;
+
+      const details = await jkanimeScraper.getAnimeDetails(slug);
+      if (!details || !details.anime_id || !details.csrf_token) {
+        res.status(404).json({ error: 'No se encontraron datos de episodios para este anime' });
+        return;
+      }
+
+      // Si se solicita un rango específico de episodios [start, end] (ej. PlayerPage 5 episodios)
+      if (start_raw && end_raw) {
+        const start_num = parseInt(start_raw, 10);
+        const end_num = parseInt(end_raw, 10);
+        if (!isNaN(start_num) && !isNaN(end_num) && start_num <= end_num) {
+          const range_episodes = await jkanimeScraper.getAnimeEpisodesRange(
+            details.anime_id,
+            details.csrf_token,
+            start_num,
+            end_num
+          );
+
+          const local_episodes = await prisma.episode.findMany({
+            where: {
+              number: { in: range_episodes.map((e) => e.number) },
+              season: { anime: { slug } },
+            },
+          });
+          const local_map = new Map(local_episodes.map((e) => [e.number, e]));
+
+          const mapped = range_episodes.map((ep) => {
+            const loc = local_map.get(ep.number);
+            return {
+              id: loc ? loc.id : `${slug}-${ep.number}`,
+              number: ep.number,
+              title: ep.title,
+              image: loc?.image || ep.image || null,
+              downloadStatus: loc?.downloadStatus || 'PENDING',
+              filePath: loc?.filePath || null,
+              fileSizeBytes: loc?.fileSizeBytes ? loc.fileSizeBytes.toString() : null,
+              downloadProgress: loc?.downloadProgress || 0,
+              usedServer: loc?.usedServer || null,
+            };
+          });
+
+          res.json({
+            episodes: mapped,
+            total_episodes: details.episodes_count,
+            start: start_num,
+            end: end_num,
+          });
+          return;
+        }
+      }
+
+      // Resolver número de página: explícito o derivado del capítulo buscado
+      let target_page = 1;
+      if (page_raw) {
+        const parsed_page = parseInt(page_raw, 10);
+        if (!isNaN(parsed_page) && parsed_page > 0) {
+          target_page = parsed_page;
+        }
+      } else if (episode_raw) {
+        const ep_target = parseInt(episode_raw, 10);
+        if (!isNaN(ep_target) && ep_target > 0) {
+          target_page = Math.ceil(ep_target / 16);
+        }
+      }
+
+      const page_data = await jkanimeScraper.getAnimeEpisodes(
+        details.anime_id,
+        target_page,
+        details.csrf_token
+      );
+
+      const local_episodes = await prisma.episode.findMany({
+        where: {
+          number: { in: page_data.episodes.map((e) => e.number) },
+          season: { anime: { slug } },
+        },
+      });
+      const local_map = new Map(local_episodes.map((e) => [e.number, e]));
+
+      const mapped = page_data.episodes.map((ep) => {
+        const loc = local_map.get(ep.number);
+        return {
+          id: loc ? loc.id : `${slug}-${ep.number}`,
+          number: ep.number,
+          title: ep.title,
+          image: loc?.image || ep.image || null,
+          downloadStatus: loc?.downloadStatus || 'PENDING',
+          filePath: loc?.filePath || null,
+          fileSizeBytes: loc?.fileSizeBytes ? loc.fileSizeBytes.toString() : null,
+          downloadProgress: loc?.downloadProgress || 0,
+          usedServer: loc?.usedServer || null,
+        };
+      });
+
+      res.json({
+        episodes: mapped,
+        current_page: page_data.current_page,
+        total_pages: page_data.last_page,
+        total_episodes: page_data.total,
+      });
+    } catch (error) {
+      logger.error({ error, slug }, 'Error obteniendo episodios paginados');
+      res.status(500).json({ error: 'Error obteniendo episodios' });
+    }
+  }
+
   /**
    * Garantiza que un anime y sus episodios existan en la base de datos local.
    * Utilizado cuando se solicita la descarga de un episodio de un anime que aún no estaba en la base de datos.
    */
   public async ensureAnimePersisted(slug: string): Promise<any> {
-    let anime = await prisma.anime.findUnique({
-      where: { slug },
-      include: {
-        seasons: {
-          include: { episodes: true },
-        },
-      },
-    });
-
-    if (anime && anime.seasons.length > 0 && (anime.seasons[0]?.episodes.length ?? 0) > 0) {
-      return anime;
-    }
-
-    const scraped = await jkanimeScraper.getAnimeDetails(slug);
-    if (!scraped) {
-      throw new Error(`Anime no encontrado para persistir: ${slug}`);
-    }
-
-    const local_cover = await storageService.saveAnimeCover(slug, scraped.poster_url);
-
-    anime = await prisma.anime.upsert({
-      where: { slug },
-      update: {
-        posterUrl: local_cover || scraped.poster_url,
-      },
-      create: {
-        slug,
-        title: scraped.title,
-        posterUrl: local_cover || scraped.poster_url,
-        synopsis: scraped.synopsis,
-        genres: scraped.genres,
-        status: scraped.status,
-        type: scraped.type || 'Serie',
-        studios: scraped.studios || null,
-        seasonName: scraped.season_name || null,
-        languages: scraped.languages || null,
-        episodesCount: scraped.episodes_count || null,
-        duration: scraped.duration || null,
-        aired: scraped.aired || null,
-        inWatchlist: true, // Al descargarse, se incorpora a la biblioteca de interés
-      },
-      include: {
-        seasons: {
-          include: { episodes: true },
-        },
-      },
-    });
-
-    let season = anime.seasons[0];
-    if (!season) {
-      season = await prisma.season.create({
-        data: {
-          animeId: anime.id,
-          number: 1,
-          title: 'Temporada 1',
-        },
-        include: { episodes: true },
-      });
-    }
-
-    if (scraped.anime_id && scraped.csrf_token) {
-      const scraped_episodes = await jkanimeScraper.getAllAnimeEpisodes(
-        scraped.anime_id,
-        scraped.csrf_token
-      );
-
-      for (const ep of scraped_episodes) {
-        const local_thumb = ep.image
-          ? await storageService.saveEpisodeThumbnail(slug, ep.number, ep.image)
-          : null;
-
-        await prisma.episode.upsert({
-          where: {
-            seasonId_number: {
-              seasonId: season.id,
-              number: ep.number,
-            },
-          },
-          update: {
-            image: local_thumb || ep.image,
-          },
-          create: {
-            seasonId: season.id,
-            number: ep.number,
-            title: ep.title,
-            image: local_thumb || ep.image,
-            downloadStatus: 'PENDING',
-          },
-        });
-      }
-    }
-
-    return await prisma.anime.findUnique({
-      where: { slug },
-      include: {
-        seasons: {
-          include: { episodes: true },
-        },
-      },
-    });
+    return ensureAnimePersisted(slug, true);
   }
 }
 

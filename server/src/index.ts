@@ -9,6 +9,7 @@ import animeRoutes from './routes/animeRoutes.js';
 import streamRoutes from './routes/streamRoutes.js';
 import downloadRoutes from './routes/downloadRoutes.js';
 import storageRoutes from './routes/storageRoutes.js';
+import historyRoutes from './routes/historyRoutes.js';
 import schedulerService from './services/scheduler.js';
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/anime', animeRoutes);
 app.use('/api/stream', streamRoutes);
 app.use('/api/downloads', downloadRoutes);
 app.use('/api/storage', storageRoutes);
+app.use('/api/history', historyRoutes);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

@@ -14,9 +14,26 @@ export class StreamController {
     }
 
     try {
-      const episode = await prisma.episode.findUnique({
+      let episode = await prisma.episode.findUnique({
         where: { id: episode_id },
       });
+
+      if (!episode) {
+        // Soporte para IDs sintéticos generados en la navegación (ej: kanojo-ga-flag-wo-oraretara-2)
+        const match = episode_id.match(/^(.*)-(\d+)$/);
+        if (match && match[1] && match[2]) {
+          const slug = match[1];
+          const num = parseInt(match[2], 10);
+          episode = await prisma.episode.findFirst({
+            where: {
+              number: num,
+              season: {
+                anime: { slug },
+              },
+            },
+          });
+        }
+      }
 
       if (!episode || !episode.filePath) {
         res.status(404).json({ error: 'Episodio no encontrado o no ha sido descargado' });

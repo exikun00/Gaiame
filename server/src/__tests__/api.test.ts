@@ -23,6 +23,12 @@ describe('API Integration Tests', () => {
     expect(res.body).toHaveProperty('error');
   });
 
+  it('GET /api/stream/local/:episodeId con slug sintético inexistente debe retornar 404', async () => {
+    const res = await request(app).get('/api/stream/local/anime-no-existente-999');
+    expect(res.status).toBe(404);
+    expect(res.body).toHaveProperty('error');
+  });
+
   it('GET /api/anime/search sin parámetro q debe responder 400', async () => {
     const res = await request(app).get('/api/anime/search');
     expect(res.status).toBe(400);

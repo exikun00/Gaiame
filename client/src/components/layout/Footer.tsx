@@ -14,11 +14,9 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-6 text-sm text-surface-50">
-          <span className="text-surface-cream font-mono">&#123; Datos extraídos de jkanime.net &#125;</span>
+          <span>By Exikun00</span>
           <span className="text-surface-25">•</span>
-          <span>PostgreSQL + Prisma</span>
-          <span className="text-surface-25">•</span>
-          <span>React + Vite</span>
+          <span>G v{__APP_VERSION__}</span>
         </div>
       </div>
     </footer>

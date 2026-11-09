@@ -5,6 +5,7 @@ import HairlineDivider from '../components/ui/HairlineDivider.js';
 import PillButton from '../components/ui/PillButton.js';
 import { Bookmark, Search } from 'lucide-react';
 import { WatchlistAnimeItem } from '../hooks/useWatchlist.js';
+import { AnimeGridSkeleton } from '../components/ui/ShimmerSkeleton.js';
 
 interface WatchlistPageProps {
   watchlist: WatchlistAnimeItem[];
@@ -46,9 +47,7 @@ export const WatchlistPage: React.FC<WatchlistPageProps> = ({
       <HairlineDivider className="my-6 md:my-8" />
 
       {is_loading ? (
-        <div className="py-20 text-center text-surface-50 font-mono">
-          &#123; Cargando biblioteca personal... &#125;
-        </div>
+        <AnimeGridSkeleton count={8} />
       ) : watchlist.length === 0 ? (
         <div className="py-20 text-center max-w-md mx-auto">
           <Bookmark className="w-12 h-12 text-surface-50 mx-auto mb-4" />

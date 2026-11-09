@@ -4,8 +4,10 @@ import Navbar from './components/layout/Navbar.js';
 import Footer from './components/layout/Footer.js';
 import HomePage from './pages/HomePage.js';
 import AnimeDetailPage from './pages/AnimeDetailPage.js';
+import PlayerPage from './pages/PlayerPage.js';
 import WatchlistPage from './pages/WatchlistPage.js';
 import DownloadsPage from './pages/DownloadsPage.js';
+import HistoryPage from './pages/HistoryPage.js';
 import VideoPlayer from './components/player/VideoPlayer.js';
 import useDownloads from './hooks/useDownloads.js';
 import useWatchlist from './hooks/useWatchlist.js';
@@ -20,6 +22,8 @@ export const App: React.FC = () => {
     title: string;
     is_downloaded: boolean;
     number?: number;
+    slug?: string;
+    poster_url?: string;
   } | null>(null);
 
   const {
@@ -85,6 +89,10 @@ export const App: React.FC = () => {
           />
           <Route path="/biblioteca" element={<Navigate to="/library" replace />} />
 
+          {/* Historial de visualización (/history y alias /historial) */}
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/historial" element={<Navigate to="/history" replace />} />
+
           {/* Gestor de Descargas (/downloads y alias /descargas) */}
           <Route
             path="/downloads"
@@ -95,19 +103,24 @@ export const App: React.FC = () => {
                 storage_usage={storage_usage}
                 onCancelTask={cancelTask}
                 onDeleteFile={deleteEpisodeFile}
-                onPlayEpisode={(ep) => setPlayingEpisode(ep)}
+                onPlayEpisode={(ep) => {
+                  if (ep.slug && ep.number) {
+                    navigate(`/anime/${ep.slug}/${ep.number}`);
+                  } else {
+                    setPlayingEpisode(ep);
+                  }
+                }}
                 onGoToCatalog={() => navigate('/')}
               />
             }
           />
           <Route path="/descargas" element={<Navigate to="/downloads" replace />} />
 
-          {/* Ficha de Anime y Reproducción por Episodio */}
+          {/* Ficha de Anime */}
           <Route
             path="/anime/:slug"
             element={
               <AnimeDetailPage
-                onPlayEpisode={(ep) => setPlayingEpisode(ep)}
                 onEnqueueEpisode={enqueueEpisode}
                 onEnqueueSeason={enqueueSeason}
                 onEnqueueAnime={enqueueAnime}
@@ -116,18 +129,11 @@ export const App: React.FC = () => {
               />
             }
           />
+
+          {/* Reproductor Dedicado */}
           <Route
             path="/anime/:slug/:episode"
-            element={
-              <AnimeDetailPage
-                onPlayEpisode={(ep) => setPlayingEpisode(ep)}
-                onEnqueueEpisode={enqueueEpisode}
-                onEnqueueSeason={enqueueSeason}
-                onEnqueueAnime={enqueueAnime}
-                onDeleteEpisodeFile={deleteEpisodeFile}
-                onToggleWatchlist={toggleWatchlist}
-              />
-            }
+            element={<PlayerPage />}
           />
 
           {/* Fallback general */}
@@ -141,6 +147,9 @@ export const App: React.FC = () => {
           episode_id={playing_episode.id}
           episode_title={playing_episode.title}
           is_downloaded={playing_episode.is_downloaded}
+          episode_number={playing_episode.number}
+          anime_slug={playing_episode.slug}
+          poster_url={playing_episode.poster_url}
           onClose={handleClosePlayer}
         />
       )}

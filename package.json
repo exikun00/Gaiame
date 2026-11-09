@@ -1,6 +1,6 @@
 {
   "name": "gaiame",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Plataforma full-stack para catálogo, streaming híbrido y gestor de descargas de anime",
   "private": true,
   "workspaces": [

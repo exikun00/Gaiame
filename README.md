@@ -20,67 +20,6 @@ Metadatos completos (estado, tipo, estudios, temporada, géneros), carátula alm
 
 ---
 
-## Características Principales
-
-* **Streaming Híbrido:**
-  * Reproducción online fluida integrando los 9 servidores autorizados y verificados (`Desu`, `Magi`, `Mediafire`, `Mp4upload`, `Mixdrop`, `Vidhide`, `Filemoon`, `VOE`, `Streamtape`).
-  * Fallback automático a los espejos disponibles si un servidor externo está caído.
-* **Gestor de Descargas Blindado:**
-  * Descarga concurrente controlada de episodios individuales, temporadas completas o animes enteros directamente al disco del servidor.
-  * **Blindaje en 4 niveles contra archivos corruptos:**
-    1. Pre-flight Content-Type Guard (`video/*`, `application/octet-stream`).
-    2. Sniffing de Magic-Bytes iniciales (detección inmediata de páginas HTML o errores de mirror).
-    3. Validación de tamaño mínimo (> 5 MB).
-    4. **Verificación obligatoria post-descarga con `ffprobe`** antes de registrar el episodio como completado.
-* **Reproducción Local HTTP 206 (Partial Content):**
-  * Streaming directo de videos `.mp4` descargados en el servidor con soporte para saltos instantáneos en la línea de tiempo (*range requests*).
-* **Almacenamiento Local de Carátulas y Miniaturas:**
-  * Descarga física y persistencia de carátulas (`data/covers/`) y miniaturas de episodios (`data/thumbnails/`) al agregar animes a la biblioteca para disponibilidad 100% offline.
-  * Endpoint local optimizado con cabeceras de caché inmutable (`Cache-Control: public, max-age=2592000`).
-* **Biblioteca Personal y Borrado Diferido (Grace Period):**
-  * Vista `/library` exclusiva para tu lista de seguimiento (Watchlist).
-  * **Margen de seguridad:** al desmarcar un anime de la biblioteca, no se borra de inmediato; una tarea programada horaria se encarga de purgar definitivamente los archivos y registros solo si no se vuelve a marcar.
-* **Tareas Programadas Automáticas (`SchedulerService`):**
-  * **Cada hora (`0 * * * *`):** Purga por lotes diferida de animes y archivos que quedaron fuera de la Watchlist.
-  * **Cada día a las 03:00 A.M. (`0 3 * * *`):** Sincronización automática de metadatos (cambio de estado a "Concluido", nuevos episodios emitidos y descarga de sus miniaturas).
-* **Logging Diario Segregado con Retención de 7 Días:**
-  * Canales dedicados con `pino-roll`: `server.log`, `errors.log` y `users.log`.
-  * Rotación diaria por fecha y purga automática de logs con más de 7 días de antigüedad.
-
----
-
-## Estructura del Proyecto
-
-```text
-Gaiame/
-├── assets/
-│   └── screenshots/            # Capturas de pantalla de la interfaz
-│       ├── screen1.png         # Catálogo principal
-│       └── screen2.png         # Ficha técnica y episodios
-├── client/                     # Frontend SPA en React + Vite + Tailwind
-│   ├── src/
-│   │   ├── components/         # Componentes UI (Player, Badges, Botones, Cards)
-│   │   ├── pages/              # Páginas (HomePage, AnimeDetailPage, WatchlistPage, DownloadsPage)
-│   │   └── hooks/              # Custom hooks (useDownloads, useWatchlist)
-├── server/                     # Backend API en Express + TypeScript
-│   ├── prisma/
-│   │   └── schema.prisma       # Modelos Prisma (Anime, Season, Episode, DownloadTask)
-│   ├── logs/                   # Directorio de logs rotativos diarios (server, errors, users)
-│   └── src/
-│       ├── controllers/        # Controladores REST (anime, stream, download)
-│       ├── routes/             # Enrutadores Express (incluyendo /api/storage)
-│       ├── services/           # Lógica core (scraper, downloader, extractor, storage, scheduler)
-│       └── utils/              # Configuración de logging estructurado
-├── data/                       # Almacenamiento local persistente
-│   ├── downloads/              # Archivos de video MP4 descargados
-│   ├── covers/                 # Carátulas locales de animes
-│   └── thumbnails/             # Miniaturas locales de episodios por slug
-├── docker-compose.yml          # Orquestación con PostgreSQL 18 y Gaiame App
-└── package.json                # Monorepo workspaces (npm)
-```
-
----
-
 ## Requisitos Previos
 
 * **Node.js** $\ge$ 20 LTS
@@ -91,27 +30,6 @@ Gaiame/
   # En Ubuntu / Debian:
   sudo apt update && sudo apt install -y ffmpeg
   ```
-
----
-
-## Configuración de Variables de Entorno
-
-Copia el archivo de ejemplo para configurar el entorno:
-
-```bash
-cp .env.example .env
-cp .env.example server/.env
-```
-
-Contenido por defecto de `.env`:
-```env
-PORT=3000
-NODE_ENV=development
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/anime_db?schema=public"
-DATA_DIR=./data
-MAX_CONCURRENT_DOWNLOADS=2
-JKANIME_BASE_URL=https://jkanime.net
-```
 
 ---
 
@@ -188,7 +106,7 @@ Suite de pruebas incluidas:
 ### Streaming y Servidores
 * `GET /api/stream/servers/:episodeId` - Lista de servidores disponibles ordenados por prioridad.
 * `GET /api/stream/remote/:episodeId?server=:name` - Resolución de stream óptimo o servidor específico.
-* `GET /api/stream/local/:episodeId` - Streaming local HTTP 206 de video descargado en disco.
+* `GET /api/stream/local/:episodeId` - Streaming local de video descargado en disco.
 
 ### Gestor de Descargas
 * `POST /api/downloads/queue/:episodeId` - Encolar descarga de un episodio.

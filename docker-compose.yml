@@ -10,7 +10,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d anime_db"]
       interval: 5s
@@ -24,14 +24,14 @@ services:
     container_name: gaiame_app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT}:${PORT}"
     environment:
-      PORT: 3000
-      NODE_ENV: production
-      DATABASE_URL: "postgresql://postgres:postgres@db:5432/anime_db?schema=public"
+      PORT: ${PORT}
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
       DATA_DIR: /app/data
-      MAX_CONCURRENT_DOWNLOADS: 2
-      JKANIME_BASE_URL: https://jkanime.net
+      MAX_CONCURRENT_DOWNLOADS: ${MAX_CONCURRENT_DOWNLOADS}
+      ANIME_BASE_URL: ${ANIME_BASE_URL}
     volumes:
       - ./data:/app/data
     depends_on:
